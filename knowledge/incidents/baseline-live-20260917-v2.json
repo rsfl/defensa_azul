@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "candidate_id": "knowledge-baseline-live-20260917-v2",
+  "status": "human_review_required",
+  "source_run_id": "baseline-live-20260917-v2",
+  "source_report": "reports/baseline-live-20260917-v2.json",
+  "scope": "historical deployment-verification traffic",
+  "lessons": [
+    {
+      "lesson": "Host-level Falco observations can distinguish shell creation from flag-file access and support per-container attack counting without retaining raw command lines.",
+      "applicable_to": ["docker-compose", "falco", "ctf-runtime-monitoring"],
+      "evidence_ids": [
+        "evt-attack-716413941471843f41fab853",
+        "evt-attack-be34948b9e3bdc71ddc53adf",
+        "evt-attack-1eb676185c8b793bd77f0da3",
+        "evt-attack-68ad90888e23b44f57aa2697"
+      ],
+      "limitations": [
+        "The source traffic was challenge verification rather than labeled player activity.",
+        "Runtime rules alone do not prove which HTTP exploit path led to a shell.",
+        "A missing runtime signal is not proof that no attack occurred."
+      ]
+    },
+    {
+      "lesson": "Flag-path rules must account for exact per-target mount paths; suffix-only matching missed Target Web 05 because its flag path is /flag.txt.",
+      "applicable_to": ["falco", "ctf-target-onboarding", "flag-access-detection"],
+      "evidence_ids": ["evt-attack-c5603308608b3c44c93e7817"],
+      "limitations": [
+        "The corrected Target Web 05 flag rule requires a future labeled read test to measure detection recall."
+      ]
+    },
+    {
+      "lesson": "HTTP and runtime signals need request/session/process-lineage correlation before attributing a declared CVE or T1190 exploitation technique.",
+      "applicable_to": ["sensor-fusion", "exploit-correlation", "mitre-attack"],
+      "evidence_ids": [
+        "evt-attack-53b76acb75e1a4ecde91dc68",
+        "evt-attack-bc5d8d9620dc608bd1e562db",
+        "evt-attack-a7cdf58250328309c3334cb1"
+      ],
+      "limitations": [
+        "Current mappings cover T1005 and T1059.004 only.",
+        "No exploit-route attribution should be promoted without stronger evidence."
+      ]
+    }
+  ],
+  "sanitization": {
+    "flags_removed": true,
+    "credentials_removed": true,
+    "player_identifiers_removed": true,
+    "raw_payloads_removed": true,
+    "attacker_instructions_removed": true
+  },
+  "promotion": {
+    "automatic": false,
+    "required_reviews": ["security", "ctf-fairness", "evaluation"]
+  }
+}

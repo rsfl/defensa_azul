@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defensa-azul.local/schemas/proposal.schema.json",
+  "title": "Defensa Azul Action Proposal",
+  "type": "object",
+  "required": ["run_id", "target_id", "incident_id", "action_type", "resource", "evidence_ids", "confidence", "ttl_seconds", "rollback", "expected_effect", "intended_path_impacted"],
+  "properties": {
+    "proposal_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "run_id": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string", "minLength": 1},
+    "incident_id": {"type": "string", "minLength": 1},
+    "action_type": {"type": "string", "minLength": 1},
+    "resource": {"type": "string", "minLength": 1},
+    "evidence_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "ttl_seconds": {"type": "integer", "minimum": 1},
+    "rollback": {"type": "object", "minProperties": 1},
+    "false_positive_strategy": {
+      "type": "object",
+      "properties": {
+        "auto_rollback": {"type": "boolean"},
+        "rollback_deadline_seconds": {"type": "integer", "minimum": 1},
+        "escalate_if_uncertain": {"type": "boolean"},
+        "classification_on_rollback": {"type": "string", "enum": ["false_positive", "benign_true_positive", "unresolved"]}
+      },
+      "additionalProperties": true
+    },
+    "escalation": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "recommended_owner": {"type": "string"},
+        "question": {"type": "string"},
+        "required_evidence": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      },
+      "additionalProperties": true
+    },
+    "expected_effect": {"type": "string", "minLength": 1},
+    "intended_path_impacted": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
+

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "defensa-azul"
+version = "0.1.0"
+description = "Auditable defensive-agent control plane for an authorized CTF lab"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+defensa-azul = "defensa_azul.cli:main"
+defensa-gateway = "defensa_azul.gateway:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

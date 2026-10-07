@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defensa-azul.local/schemas/event.schema.json",
+  "title": "Defensa Azul Audit Event",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "time", "observed_time", "run_id", "actor", "severity", "evidence_ids", "payload"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"type": "string", "minLength": 1},
+    "event_type": {"type": "string", "pattern": "^defense\\."},
+    "time": {"type": "string", "format": "date-time"},
+    "observed_time": {"type": "string", "format": "date-time"},
+    "run_id": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string"},
+    "incident_id": {"type": "string"},
+    "actor": {"type": "object", "required": ["type", "id"]},
+    "severity": {"enum": ["debug", "info", "low", "medium", "high", "critical"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "payload": {"type": "object"},
+    "integrity": {
+      "type": "object",
+      "required": ["sequence", "previous_event_hash", "event_hash"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 1},
+        "previous_event_hash": {"type": ["string", "null"]},
+        "event_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

@@ -1,0 +1,36 @@
+- rule: Shell spawned in CTF target container
+  desc: Detect shell processes spawned in the isolated CTF application containers
+  condition: >
+    evt.type in (execve, execveat) and container.id != host and
+    container.name in
+      (target-stack-target-web-01-1,
+       target-stack-target-web-02-1,
+       target-stack-target-web-03-1,
+       target-stack-target-web-04-1,
+       target-stack-target-web-05-1) and
+    proc.name in (sh, bash, dash)
+  output: >
+    Shell spawned in target (target=%container.name user=%user.name
+    process=%proc.name host_pid=%proc.pid container_pid=%proc.vpid
+    container_id=%container.id parent=%proc.pname cmdline=%proc.cmdline)
+  priority: WARNING
+  tags: [ctf, process]
+
+- rule: Flag file read in CTF target container
+  desc: Detect reads of all declared CTF flag paths, including Target Web 05 /flag.txt
+  condition: >
+    evt.type in (open, openat, openat2) and evt.is_open_read=true and
+    container.id != host and
+    container.name in
+      (target-stack-target-web-01-1,
+       target-stack-target-web-02-1,
+       target-stack-target-web-03-1,
+       target-stack-target-web-04-1,
+       target-stack-target-web-05-1) and
+    (fd.name endswith ".flag" or
+     (container.name = target-stack-target-web-05-1 and fd.name = "/flag.txt"))
+  output: >
+    Flag file accessed (target=%container.name proc=%proc.name
+    file=%fd.name user=%user.name)
+  priority: NOTICE
+  tags: [ctf, file, flag]

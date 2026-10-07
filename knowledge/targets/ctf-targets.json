@@ -1,0 +1,55 @@
+{
+  "inventory_version": "1.0.0",
+  "source": "sanitized target inventory template",
+  "droplet_id": "redacted",
+  "region": "redacted",
+  "compose_project": "target-stack",
+  "targets": [
+    {
+      "target_id": "target-web-01",
+      "container_name": "target-stack-target-web-01-1",
+      "host_prefix": "target-web-01.",
+      "backend_port": 80,
+      "vulnerability": {"cves": [], "advisories": [], "class": "web-application-lab"},
+      "flag_path": "/path/to/target-web-01.flag",
+      "mode": "observe"
+    },
+    {
+      "target_id": "target-web-02",
+      "container_name": "target-stack-target-web-02-1",
+      "host_prefix": "target-web-02.",
+      "backend_port": 80,
+      "vulnerability": {"cves": [], "advisories": [], "class": "web-application-lab"},
+      "flag_path": "/path/to/target-web-02.flag",
+      "mode": "observe"
+    },
+    {
+      "target_id": "target-web-03",
+      "container_name": "target-stack-target-web-03-1",
+      "host_prefix": "target-web-03.",
+      "backend_port": 8080,
+      "vulnerability": {"cves": [], "advisories": [], "class": "web-application-lab"},
+      "flag_path": "/path/to/target-web-03.flag",
+      "mode": "observe"
+    },
+    {
+      "target_id": "target-web-04",
+      "container_name": "target-stack-target-web-04-1",
+      "host_prefix": "target-web-04.",
+      "backend_port": 3000,
+      "vulnerability": {"cves": [], "advisories": [], "class": "web-application-lab"},
+      "flag_path": "/path/to/target-web-04.flag",
+      "mode": "observe"
+    },
+    {
+      "target_id": "target-web-05",
+      "container_name": "target-stack-target-web-05-1",
+      "host_prefix": "target-web-05.",
+      "backend_port": 3000,
+      "vulnerability": {"cves": [], "advisories": [], "class": "web-application-lab"},
+      "flag_path": "/path/to/target-web-05.flag",
+      "mode": "observe"
+    }
+  ]
+}
+

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defensa-azul.local/schemas/attack.schema.json",
+  "title": "Defensa Azul Correlated Attack",
+  "type": "object",
+  "required": ["attack_id", "attack_type", "outcome", "signal_count", "first_seen", "last_seen", "correlation_window_seconds", "cves", "ttps", "instance_id", "source_identity", "classification_basis"],
+  "properties": {
+    "attack_id": {"type": "string", "minLength": 1},
+    "attack_type": {"type": "string", "minLength": 1},
+    "outcome": {"enum": ["attempted", "observed", "successful", "blocked", "mitigated", "unknown"]},
+    "signal_count": {"type": "integer", "minimum": 1},
+    "first_seen": {"type": "string", "format": "date-time"},
+    "last_seen": {"type": "string", "format": "date-time"},
+    "correlation_window_seconds": {"type": "integer", "minimum": 1},
+    "cves": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "ttps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "instance_id": {"type": "string", "minLength": 1},
+    "source_identity": {"type": "string"},
+    "classification_basis": {"type": "string"}
+  },
+  "additionalProperties": false
+}

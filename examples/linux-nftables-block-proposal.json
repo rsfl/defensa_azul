@@ -1,0 +1,31 @@
+{
+  "run_id": "run-demo",
+  "target_id": "linux-server01",
+  "incident_id": "inc-demo-linux-ssh",
+  "action_type": "linux_nftables_block",
+  "resource": "{\"src_ip\":\"xxx.xxx.xxx.xxx\",\"protocol\":\"tcp\",\"dst_port\":22,\"chain\":\"defensa_azul_input\",\"rule_comment\":\"defensa-azul inc-demo-linux-ssh\"}",
+  "evidence_ids": ["evt-defense-detected", "evt-linux-auth", "evt-zeek-ssh"],
+  "confidence": 0.96,
+  "ttl_seconds": 300,
+  "rollback": {
+    "type": "remove_nftables_rule",
+    "chain": "defensa_azul_input",
+    "rule_comment": "defensa-azul inc-demo-linux-ssh",
+    "automatic": true
+  },
+  "false_positive_strategy": {
+    "auto_rollback": true,
+    "rollback_deadline_seconds": 300,
+    "escalate_if_uncertain": true,
+    "classification_on_rollback": "unresolved"
+  },
+  "escalation": {
+    "enabled": true,
+    "reason": "host firewall action changes Linux network policy",
+    "recommended_owner": "human_analyst",
+    "question": "Confirm this SSH activity should be blocked for the configured TTL.",
+    "required_evidence": ["defense.attack.detected", "linux_auth", "zeek_ssh_or_conn"]
+  },
+  "expected_effect": "Temporarily block SSH from the attacker VM to the Linux server while preserving rollback.",
+  "intended_path_impacted": false
+}

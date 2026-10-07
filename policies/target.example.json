@@ -1,0 +1,15 @@
+{
+  "mode": "recommend",
+  "allowed_actions": [
+    "increase_capture",
+    "snapshot_namespace",
+    "shape_descendant_cgroup",
+    "terminate_malicious_child",
+    "restore_non_flag_file",
+    "restart_service_process",
+    "restrict_unexpected_egress"
+  ],
+  "minimum_confidence": 0.95,
+  "maximum_ttl_seconds": 300
+}
+

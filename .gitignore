@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Runtime data and generated reports may contain sensitive telemetry.
+data/**/*.jsonl
+reports/*.json
+reports/*.md
+exports/
+
+# Local credentials and private keys.
+.env
+.secrets/
+*.pem
+*.key
+
+# Local tooling and operating-system metadata.
+.idea/
+.vscode/
+.DS_Store

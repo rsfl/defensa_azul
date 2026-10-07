@@ -1,0 +1,26 @@
+{
+  "run_id": "run-demo",
+  "target_id": "target-demo",
+  "incident_id": "inc-demo",
+  "action_type": "terminate_malicious_child",
+  "resource": "pid:4242",
+  "evidence_ids": ["sensor-demo-1"],
+  "confidence": 0.98,
+  "ttl_seconds": 60,
+  "rollback": {"type": "restart_service_process", "service": "demo"},
+  "false_positive_strategy": {
+    "auto_rollback": true,
+    "rollback_deadline_seconds": 60,
+    "escalate_if_uncertain": true,
+    "classification_on_rollback": "unresolved"
+  },
+  "escalation": {
+    "enabled": true,
+    "reason": "human approval required for non-marker modification",
+    "recommended_owner": "human_analyst",
+    "question": "Confirm that the child process is malicious and not expected lab behavior.",
+    "required_evidence": ["sensor-demo-1"]
+  },
+  "expected_effect": "Remove confirmed malicious child without stopping the protected service",
+  "intended_path_impacted": false
+}

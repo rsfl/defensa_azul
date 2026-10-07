@@ -1,0 +1,30 @@
+{
+  "run_id": "run-demo",
+  "target_id": "win-client01",
+  "incident_id": "inc-demo-windows-smb",
+  "action_type": "windows_firewall_block",
+  "resource": "{\"src_ip\":\"xxx.xxx.xxx.xxx\",\"protocol\":\"tcp\",\"dst_port\":445,\"direction\":\"inbound\",\"rule_name\":\"DefensaAzul block attacker SMB inc-demo-windows-smb\"}",
+  "evidence_ids": ["evt-defense-detected", "evt-windows-4625", "evt-zeek-smb"],
+  "confidence": 0.97,
+  "ttl_seconds": 300,
+  "rollback": {
+    "type": "remove_windows_firewall_rule",
+    "rule_name": "DefensaAzul block attacker SMB inc-demo-windows-smb",
+    "automatic": true
+  },
+  "false_positive_strategy": {
+    "auto_rollback": true,
+    "rollback_deadline_seconds": 300,
+    "escalate_if_uncertain": true,
+    "classification_on_rollback": "unresolved"
+  },
+  "escalation": {
+    "enabled": true,
+    "reason": "network blocking action changes endpoint policy",
+    "recommended_owner": "human_analyst",
+    "question": "Confirm this SMB activity is not expected lab scanning before enforcement outside a lab.",
+    "required_evidence": ["defense.attack.detected", "windows_4625_or_4776", "zeek_smb_or_conn"]
+  },
+  "expected_effect": "Temporarily block SMB from the attacker VM to the Windows client while preserving rollback.",
+  "intended_path_impacted": false
+}

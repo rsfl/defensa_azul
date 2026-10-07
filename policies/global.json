@@ -1,0 +1,86 @@
+{
+  "policy_version": "0.2.0",
+  "targets": {
+    "target-web-01": {
+      "mode": "enforce",
+      "allowed_actions": ["suspend_process"],
+      "minimum_confidence": 0.98,
+      "maximum_ttl_seconds": 15
+    },
+    "target-web-02": {
+      "mode": "observe",
+      "allowed_actions": ["increase_capture", "snapshot_namespace"],
+      "minimum_confidence": 0.95,
+      "maximum_ttl_seconds": 300
+    },
+    "target-web-03": {
+      "mode": "observe",
+      "allowed_actions": ["increase_capture", "snapshot_namespace"],
+      "minimum_confidence": 0.95,
+      "maximum_ttl_seconds": 300
+    },
+    "target-web-04": {
+      "mode": "observe",
+      "allowed_actions": ["increase_capture", "snapshot_namespace"],
+      "minimum_confidence": 0.95,
+      "maximum_ttl_seconds": 300
+    },
+    "target-web-05": {
+      "mode": "enforce",
+      "allowed_actions": ["suspend_process"],
+      "minimum_confidence": 0.98,
+      "maximum_ttl_seconds": 15
+    },
+    "nginx-server01": {
+      "mode": "enforce",
+      "allowed_actions": ["increase_capture"],
+      "minimum_confidence": 0.70,
+      "maximum_ttl_seconds": 300
+    },
+    "win-client01": {
+      "mode": "enforce",
+      "allowed_actions": ["increase_capture", "windows_firewall_block"],
+      "minimum_confidence": 0.70,
+      "maximum_ttl_seconds": 300,
+      "windows_firewall": {
+        "allowed_sources": [],
+        "protected_sources": ["127.0.0.1"],
+        "bridge_source": "",
+        "bridge_target": "win-dc01",
+        "bridge_ports": [445]
+      }
+    },
+    "win-dc01": {
+      "mode": "enforce",
+      "allowed_actions": ["increase_capture", "windows_firewall_block"],
+      "minimum_confidence": 0.70,
+      "maximum_ttl_seconds": 300,
+      "windows_firewall": {
+        "allowed_sources": [],
+        "protected_sources": ["127.0.0.1"],
+        "bridge_source": "",
+        "bridge_target": "win-dc01",
+        "bridge_ports": [445]
+      }
+    },
+    "linux-server01": {
+      "mode": "enforce",
+      "allowed_actions": ["increase_capture", "linux_nftables_block"],
+      "minimum_confidence": 0.70,
+      "maximum_ttl_seconds": 300,
+      "linux_nftables": {
+        "allowed_sources": [],
+        "protected_sources": ["127.0.0.1"],
+        "allowed_ports": [22, 80, 443],
+        "allowed_chains": ["defensa_azul_input"],
+        "rule_comment_prefix": "defensa-azul "
+      }
+    },
+    "zeek-sensor01": {
+      "mode": "enforce",
+      "allowed_actions": ["increase_capture"],
+      "minimum_confidence": 0.70,
+      "maximum_ttl_seconds": 300
+    }
+  }
+}

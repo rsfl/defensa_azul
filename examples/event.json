@@ -1,0 +1,12 @@
+{
+  "event_type": "defense.incident.opened",
+  "actor": {"type": "agent", "id": "triage-coordinator"},
+  "payload": {"summary": "Suspicious child process observed", "disposition": "investigate"},
+  "run_id": "run-demo",
+  "target_id": "target-demo",
+  "incident_id": "inc-demo",
+  "evidence_ids": ["sensor-demo-1"],
+  "severity": "high",
+  "confidence": 0.92
+}
+

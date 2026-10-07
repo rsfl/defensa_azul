@@ -1,0 +1,27 @@
+[Unit]
+Description=Defensa Azul bounded target actuator
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/defensa-target-actuator.env
+ExecStart=/usr/bin/python3 /opt/defensa-target-actuator/target_actuator.py
+Restart=on-failure
+RestartSec=3
+KillMode=process
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

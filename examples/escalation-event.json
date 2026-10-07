@@ -1,0 +1,17 @@
+{
+  "event_type": "defense.escalation",
+  "actor": {"type": "policy-gate", "id": "safety-gate"},
+  "payload": {
+    "reason": "confidence_below_enforcement_threshold",
+    "recommended_owner": "human_analyst",
+    "question": "SMB failure may be controlled lab activity or malicious lateral movement.",
+    "required_evidence": ["defense.attack.detected", "windows_4625_or_4776", "zeek_smb_or_conn"],
+    "allowed_next_decisions": ["approve_enforcement", "mark_false_positive", "keep_observing"]
+  },
+  "run_id": "run-demo",
+  "target_id": "win-client01",
+  "incident_id": "inc-demo",
+  "evidence_ids": ["evt-defense-detected"],
+  "severity": "medium",
+  "confidence": 0.72
+}

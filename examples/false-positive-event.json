@@ -1,0 +1,21 @@
+{
+  "event_type": "defense.false_positive",
+  "actor": {"type": "analyst", "id": "human-review"},
+  "payload": {
+    "reason": "expected_controlled_lab_probe",
+    "source_event_id": "evt-defense-detected",
+    "reversed_actions": ["evt-action-result"],
+    "suppression_recommendation": {
+      "scope": "run_id",
+      "value": "run-demo",
+      "expires_at": "2026-09-30T00:00:00Z"
+    },
+    "lesson": "Do not escalate this exact swarm run_id during controlled validation."
+  },
+  "run_id": "run-demo",
+  "target_id": "win-client01",
+  "incident_id": "inc-demo",
+  "evidence_ids": ["evt-defense-detected", "evt-action-result", "evt-rollback"],
+  "severity": "info",
+  "confidence": 1.0
+}

@@ -1,0 +1,129 @@
+services:
+  data-init:
+    build: .
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 10001:10001 /data"]
+    volumes:
+      - defensa-data:/data
+    restart: "no"
+
+  gateway:
+    build: .
+    environment:
+      DEFENSA_GATEWAY_TOKEN: ${DEFENSA_GATEWAY_TOKEN:?set DEFENSA_GATEWAY_TOKEN}
+      DEFENSA_GATEWAY_HOST: 0.0.0.0
+      DEFENSA_EVENT_STORE: /data/events.jsonl
+      DEFENSA_POLICY: /app/policies/global.json
+    volumes:
+      - defensa-data:/data
+      - ./policies:/app/policies:ro
+    ports:
+      - "${DEFENSA_BIND_ADDRESS:-127.0.0.1}:${DEFENSA_GATEWAY_PUBLISHED_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+
+  worker:
+    build: .
+    command: ["python", "-m", "defensa_azul.worker"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
+      DEFENSA_ANALYSIS_MODEL: ${DEFENSA_ANALYSIS_MODEL:-gpt-5.6-luna}
+      DEFENSA_RUN_ID: ${DEFENSA_RUN_ID:-live}
+      DEFENSA_EVENT_STORE: /data/events.jsonl
+      DEFENSA_POLICY: /app/policies/global.json
+      DEFENSA_OPENAI_TOKEN_BUDGET: ${DEFENSA_OPENAI_TOKEN_BUDGET:-0}
+      DEFENSA_OPENAI_TOKEN_WARNING_PERCENT: ${DEFENSA_OPENAI_TOKEN_WARNING_PERCENT:-80}
+      DEFENSA_OPENAI_RATE_WARNING_PERCENT: ${DEFENSA_OPENAI_RATE_WARNING_PERCENT:-10}
+    volumes:
+      - defensa-data:/data
+      - ./policies:/app/policies:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+
+  discord-notifier:
+    build: .
+    command: ["python", "-m", "defensa_azul.notifier"]
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID:?set DISCORD_CHANNEL_ID}
+      DEFENSA_EVENT_STORE: /data/events.jsonl
+    volumes:
+      - defensa-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+
+  actuator:
+    build: .
+    command: ["python", "-m", "defensa_azul.actuator"]
+    environment:
+      DEFENSA_ACTUATOR_TOKEN: ${DEFENSA_ACTUATOR_TOKEN:?set DEFENSA_ACTUATOR_TOKEN}
+      DEFENSA_TARGET_ACTUATOR_URL: ${DEFENSA_TARGET_ACTUATOR_URL:-http://127.0.0.1:9091}
+      DEFENSA_EVENT_STORE: /data/events.jsonl
+    volumes:
+      - defensa-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+
+  splunk-exporter:
+    profiles: ["splunk"]
+    build: .
+    command: ["python", "-m", "defensa_azul.splunk_exporter"]
+    environment:
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      SPLUNK_HEC_INDEX: ${SPLUNK_HEC_INDEX:-}
+      SPLUNK_HEC_HOST: ${SPLUNK_HEC_HOST:-defense-agent-host}
+      SPLUNK_HEC_VERIFY_TLS: ${SPLUNK_HEC_VERIFY_TLS:-true}
+      DEFENSA_EVENT_STORE: /data/events.jsonl
+    volumes:
+      - defensa-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+
+volumes:
+  defensa-data:

@@ -1,0 +1,55 @@
+{
+  "version": "0.1.0",
+  "roles": [
+    {
+      "id": "triage-coordinator",
+      "skill": "ctf-evidence-analysis",
+      "purpose": "Correlate observations, open incidents, and dispatch bounded analysis work.",
+      "may_propose_actions": false,
+      "may_approve_actions": false
+    },
+    {
+      "id": "behavior-analyst",
+      "skill": "ctf-evidence-analysis",
+      "purpose": "Reconstruct attacker behavior and produce evidence-linked timelines.",
+      "may_propose_actions": false,
+      "may_approve_actions": false
+    },
+    {
+      "id": "exploit-analyst",
+      "skill": "ctf-evidence-analysis",
+      "purpose": "Correlate observed behavior with curated CVE and Exploit-DB knowledge.",
+      "may_propose_actions": false,
+      "may_approve_actions": false
+    },
+    {
+      "id": "integrity-analyst",
+      "skill": "ctf-evidence-analysis",
+      "purpose": "Compare process, file, and configuration state with the declared baseline.",
+      "may_propose_actions": false,
+      "may_approve_actions": false
+    },
+    {
+      "id": "response-planner",
+      "skill": "ctf-response-planning",
+      "purpose": "Create typed reversible proposals from completed analysis.",
+      "may_propose_actions": true,
+      "may_approve_actions": false
+    },
+    {
+      "id": "safety-arbiter",
+      "skill": "ctf-fairness-review",
+      "purpose": "Review authorization, evidence, reversibility, and challenge fairness.",
+      "may_propose_actions": false,
+      "may_approve_actions": true
+    },
+    {
+      "id": "knowledge-curator",
+      "skill": "ctf-incident-reporting",
+      "purpose": "Create sanitized lesson candidates and complete run reports for review.",
+      "may_propose_actions": false,
+      "may_approve_actions": false
+    }
+  ]
+}
+
