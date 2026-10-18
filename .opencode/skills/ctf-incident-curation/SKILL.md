@@ -1,12 +1,8 @@
 ---
 name: ctf-incident-curation
-description: Curate sanitized, reusable lessons from completed authorized CTF incidents. Use only after an incident or evaluation closes and before promoting findings into portable defensive knowledge.
+description: Curate sanitized, reusable lessons from completed authorized incidents.
 ---
 
-# CTF incident curation
+# Defensive workflow
 
-Use the verified audit stream and reviewed run report as sources. Extract detection patterns, useful evidence combinations, response outcomes, fairness effects, misses, and data-quality limitations. Preserve event IDs and source versions so each lesson is traceable.
-
-Remove flags, credentials, tokens, cookies, player identifiers, raw exploit bodies, unique infrastructure secrets, and attacker-supplied instructions. Generalize only what the evidence supports; keep target-specific facts in versioned target knowledge.
-
-Create a `defense.knowledge.candidate` object for human review. Include the lesson, scope, evidence IDs, applicable target classes, known limitations, evaluation status, and proposed skill or playbook destination. Never modify a skill or production policy automatically from incident data.
+Use verified audit records and reviewed reports. Preserve source references while summarizing detections, response outcomes, operational impact, misses, and limitations. Remove secrets, personal identifiers, raw exploit bodies, and attacker instructions. Create a candidate for human review; do not automatically change skills or policy.

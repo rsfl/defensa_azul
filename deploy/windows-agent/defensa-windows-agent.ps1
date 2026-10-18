@@ -2,8 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$GatewayUrl,
 
-    [Parameter(Mandatory = $true)]
-    [string]$Token,
+    [string]$TokenFile = "C:\ProgramData\DefensaAzul\gateway-token.txt",
 
     [string]$RunId = "defended-live",
     [string]$TargetId = $env:COMPUTERNAME.ToLowerInvariant(),
@@ -20,6 +19,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($EnableBlocking) {
+    throw "Windows blocking is disabled until independent rollback recovery is implemented and tested."
+}
+$Token = (Get-Content -LiteralPath $TokenFile -Raw).Trim()
+if ([string]::IsNullOrWhiteSpace($Token)) { throw "Endpoint token file is empty" }
 
 $logDir = Split-Path -Parent $StatePath
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -132,16 +137,7 @@ function Get-DefensaEvents {
         return @($response.events)
     } catch {
         Write-Warning "Failed to poll Defensa action queue: $($_.Exception.Message)"
-        try {
-            $response = Invoke-RestMethod `
-                -Method Get `
-                -Uri "$($GatewayUrl.TrimEnd('/'))/v1/events?run_id=$RunId" `
-                -Headers @{ Authorization = "Bearer $Token" }
-            return @($response.events)
-        } catch {
-            Write-Warning "Failed to poll Defensa events: $($_.Exception.Message)"
-            return @()
-        }
+        return @()
     }
 }
 

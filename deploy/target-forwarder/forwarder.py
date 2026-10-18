@@ -44,13 +44,13 @@ def send_record(base_url: str, token: str, run_id: str, sensor: str, record: dic
 
 def main() -> None:
     base_url = os.environ.get("DEFENSA_GATEWAY_URL", "http://127.0.0.1:8080").rstrip("/")
-    token = os.environ.get("DEFENSA_GATEWAY_TOKEN", "")
+    token = os.environ.get("DEFENSA_ENDPOINT_TOKEN", "")
     run_id = os.environ.get("DEFENSA_RUN_ID", "live")
     checkpoint_path = Path(os.environ.get("DEFENSA_FORWARDER_CHECKPOINT", "/var/lib/defensa-forwarder/checkpoints.json"))
     poll_seconds = float(os.environ.get("DEFENSA_FORWARDER_POLL_SECONDS", "1"))
     from_end = os.environ.get("DEFENSA_FORWARD_FROM_END", "true").lower() == "true"
     if not token:
-        raise SystemExit("DEFENSA_GATEWAY_TOKEN is required")
+        raise SystemExit("DEFENSA_ENDPOINT_TOKEN is required")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     checkpoints = load_checkpoints(checkpoint_path)
 

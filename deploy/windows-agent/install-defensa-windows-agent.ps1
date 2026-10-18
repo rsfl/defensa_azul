@@ -2,9 +2,6 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$GatewayUrl,
 
-    [Parameter(Mandatory = $true)]
-    [string]$Token,
-
     [string]$RunId = "defended-live",
     [string]$TargetId = $env:COMPUTERNAME.ToLowerInvariant(),
     [string]$InstallDir = "C:\ProgramData\DefensaAzul",
@@ -17,12 +14,44 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($EnableBlocking) {
+    throw "Windows blocking is disabled until independent rollback recovery is implemented and tested."
+}
 
 $sourceAgent = Join-Path $PSScriptRoot "defensa-windows-agent.ps1"
 $targetAgent = Join-Path $InstallDir "defensa-windows-agent.ps1"
 $logPath = Join-Path $InstallDir "windows-agent.log"
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+$dirAcl = New-Object System.Security.AccessControl.DirectorySecurity
+$dirAcl.SetAccessRuleProtection($true, $false)
+foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+    $identity = New-Object System.Security.Principal.SecurityIdentifier($sid)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $dirAcl.AddAccessRule($rule)
+}
+Set-Acl -LiteralPath $InstallDir -AclObject $dirAcl
+$tokenFile = Join-Path $InstallDir "gateway-token.txt"
+if (-not (Test-Path -LiteralPath $tokenFile)) { New-Item -ItemType File -Path $tokenFile | Out-Null }
+$fileAcl = New-Object System.Security.AccessControl.FileSecurity
+$fileAcl.SetAccessRuleProtection($true, $false)
+foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+    $identity = New-Object System.Security.Principal.SecurityIdentifier($sid)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'Allow')
+    $fileAcl.AddAccessRule($rule)
+}
+Set-Acl -LiteralPath $tokenFile -AclObject $fileAcl
+$secureToken = Read-Host "Endpoint token (input hidden)" -AsSecureString
+$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+try {
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    if ([string]::IsNullOrWhiteSpace($plainToken)) { throw "Endpoint token cannot be empty" }
+    [IO.File]::WriteAllText($tokenFile, $plainToken, [Text.Encoding]::UTF8)
+} finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    $plainToken = $null
+    $secureToken.Dispose()
+}
 if ((Resolve-Path -LiteralPath $sourceAgent).Path -ne (Resolve-Path -LiteralPath $targetAgent -ErrorAction SilentlyContinue).Path) {
     Copy-Item -LiteralPath $sourceAgent -Destination $targetAgent -Force
 }
@@ -32,7 +61,7 @@ $encodedArgs = @(
     "-ExecutionPolicy", "Bypass",
     "-File", "`"$targetAgent`"",
     "-GatewayUrl", "`"$GatewayUrl`"",
-    "-Token", "`"$Token`"",
+    "-TokenFile", "`"$tokenFile`"",
     "-RunId", "`"$RunId`"",
     "-TargetId", "`"$TargetId`"",
     "-PollSeconds", "$PollSeconds"

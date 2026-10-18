@@ -1,9 +1,17 @@
 import unittest
 
-from defensa_azul.integrations import to_discord_summary, to_splunk_hec
+from defensa_azul.integrations import redact, to_discord_summary, to_splunk_hec
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_nested_sensitive_fields_and_common_embedded_secrets(self):
+        value = redact({"api_key": "example-secret", "nested": [{"client_secret": "example-secret"}],
+                        "message": "Authorization: Bearer example-secret",
+                        "url": "https://example.invalid/login?token=example-secret&user=alice"})
+        self.assertEqual("[REDACTED]", value["api_key"])
+        self.assertEqual("[REDACTED]", value["nested"][0]["client_secret"])
+        self.assertNotIn("example-secret", str(value))
+        self.assertNotIn("alice", value["url"])
     def test_sensitive_values_are_redacted(self):
         event = {
             "event_type": "defense.finding",

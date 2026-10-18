@@ -1,4 +1,6 @@
-# Defensive Agent Swarm for Attack/Defense CTF Targets
+# Historical architecture plan for the original research pilot
+
+This document records the original capture-the-flag pilot and its proposed architecture. It is historical context, not a description of universal defaults or production readiness. See the README for current behavior and limitations.
 
 Status: initial architecture proposal; target manifests are still required.
 

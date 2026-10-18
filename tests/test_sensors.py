@@ -4,6 +4,10 @@ from defensa_azul.sensors import normalize_falco, normalize_traefik
 
 
 class SensorTests(unittest.TestCase):
+    def test_traefik_drops_query_and_fragment(self):
+        event = normalize_traefik({"RequestPath": "/login?token=example-secret#fragment",
+                                  "StartUTC": "2026-09-17T00:00:00Z"}, "run-1")
+        self.assertEqual("/login", event["payload"]["path"])
     def test_traefik_target_mapping(self):
         event = normalize_traefik(
             {

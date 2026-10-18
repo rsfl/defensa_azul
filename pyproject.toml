@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "defensa-azul"
 version = "0.1.0"
-description = "Auditable defensive-agent control plane for an authorized CTF lab"
+description = "Experimental auditable control plane for authorized defensive monitoring and response"
 requires-python = ">=3.11"
 dependencies = []
 

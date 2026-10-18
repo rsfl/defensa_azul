@@ -39,7 +39,7 @@
     {
       "id": "safety-arbiter",
       "skill": "ctf-fairness-review",
-      "purpose": "Review authorization, evidence, reversibility, and challenge fairness.",
+      "purpose": "Review authorization, evidence, reversibility, and operational impact.",
       "may_propose_actions": false,
       "may_approve_actions": true
     },
