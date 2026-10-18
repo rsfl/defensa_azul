@@ -1,5 +1,7 @@
 # Defensa Azul
 
+![Defensa Azul — by Rod Soto, rodsoto.net](docs/assets/defensa-azul-logo.png)
+
 Defensa Azul is an experimental defensive-agent control plane for monitoring authorized systems and evaluating bounded response proposals. It records hash-chained JSONL events, applies a fail-closed policy, exposes a restricted gateway, exports Splunk and Discord payloads, and generates JSON and Markdown reports.
 
 The included sensor mappings, target actuator, historical knowledge and some event and skill identifiers come from an earlier capture-the-flag pilot. They are examples, not a general-purpose production integration; adapt and validate target mappings, detections, permissions and rollback for each environment. All included targets start in observe mode.
