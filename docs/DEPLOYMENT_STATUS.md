@@ -1,5 +1,7 @@
 # Deployment status
 
+This is a historical pilot report, not a current deployment status or a statement of the repository's default policy.
+
 Updated: 2026-09-19
 
 ## Live topology

@@ -20,10 +20,10 @@ def _stable_id(prefix: str, value: str) -> str:
 def _call_target(url: str, token: str, proposal: dict[str, Any]) -> dict[str, Any]:
     resource = json.loads(proposal["resource"])
     body = {
+        **resource,
         "action_type": proposal["action_type"],
         "target_id": proposal["target_id"],
         "ttl_seconds": proposal["ttl_seconds"],
-        **resource,
     }
     request = urllib.request.Request(
         f"{url.rstrip('/')}/v1/actions",

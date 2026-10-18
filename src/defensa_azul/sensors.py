@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Any, Callable, Iterable
 
 from .models import AuditEvent
@@ -53,7 +54,7 @@ def normalize_traefik(record: dict[str, Any], run_id: str) -> dict[str, Any]:
             "client_host": record.get("ClientHost"),
             "request_host": record.get("RequestHost"),
             "method": record.get("RequestMethod"),
-            "path": str(record.get("RequestPath", ""))[:2048],
+            "path": urlsplit(str(record.get("RequestPath", ""))[:2048]).path,
             "status": status,
             "router": record.get("RouterName"),
             "service": record.get("ServiceName"),

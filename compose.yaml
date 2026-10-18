@@ -11,6 +11,7 @@ services:
     build: .
     environment:
       DEFENSA_GATEWAY_TOKEN: ${DEFENSA_GATEWAY_TOKEN:?set DEFENSA_GATEWAY_TOKEN}
+      DEFENSA_ENDPOINT_TOKEN: ${DEFENSA_ENDPOINT_TOKEN:?set DEFENSA_ENDPOINT_TOKEN}
       DEFENSA_GATEWAY_HOST: 0.0.0.0
       DEFENSA_EVENT_STORE: /data/events.jsonl
       DEFENSA_POLICY: /app/policies/global.json

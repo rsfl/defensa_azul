@@ -2,7 +2,7 @@
   "policy_version": "0.2.0",
   "targets": {
     "target-web-01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["suspend_process"],
       "minimum_confidence": 0.98,
       "maximum_ttl_seconds": 15
@@ -26,19 +26,19 @@
       "maximum_ttl_seconds": 300
     },
     "target-web-05": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["suspend_process"],
       "minimum_confidence": 0.98,
       "maximum_ttl_seconds": 15
     },
     "nginx-server01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["increase_capture"],
       "minimum_confidence": 0.70,
       "maximum_ttl_seconds": 300
     },
     "win-client01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["increase_capture", "windows_firewall_block"],
       "minimum_confidence": 0.70,
       "maximum_ttl_seconds": 300,
@@ -51,7 +51,7 @@
       }
     },
     "win-dc01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["increase_capture", "windows_firewall_block"],
       "minimum_confidence": 0.70,
       "maximum_ttl_seconds": 300,
@@ -64,7 +64,7 @@
       }
     },
     "linux-server01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["increase_capture", "linux_nftables_block"],
       "minimum_confidence": 0.70,
       "maximum_ttl_seconds": 300,
@@ -77,7 +77,7 @@
       }
     },
     "zeek-sensor01": {
-      "mode": "enforce",
+      "mode": "observe",
       "allowed_actions": ["increase_capture"],
       "minimum_confidence": 0.70,
       "maximum_ttl_seconds": 300

@@ -14,7 +14,7 @@ Defensa Azul stores normalized, hash-chained JSON Lines (`.jsonl`) events. Depen
 - Actions, rollbacks, misses, and evaluation scores when those features are enabled
 - Per-target instance identifiers, CVEs, and evidence-backed MITRE ATT&CK mappings
 
-The normalized stream is designed not to retain flags, credentials, authorization headers, cookies, or raw exploit bodies.
+The normalizer omits selected sensitive fields and strips HTTP query strings. Redaction is best effort; arbitrary secrets can still appear in paths or other free text. Restrict access and review telemetry before sharing it.
 
 ## Download a snapshot
 

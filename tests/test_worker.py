@@ -1,4 +1,6 @@
 import unittest
+import json
+import tempfile
 from pathlib import Path
 
 from defensa_azul.worker import (
@@ -11,6 +13,11 @@ from defensa_azul.worker import (
 
 
 class WorkerTests(unittest.TestCase):
+    def test_default_targets_start_in_observe_mode(self):
+        config = json.loads(Path("policies/global.json").read_text(encoding="utf-8"))
+        self.assertTrue(config["targets"])
+        self.assertTrue(all(target["mode"] == "observe" for target in config["targets"].values()))
+
     def test_analysis_confidence_is_numeric_and_bounded(self):
         analysis = _normalize_analysis(
             {
@@ -95,7 +102,12 @@ class WorkerTests(unittest.TestCase):
                 },
             },
         }
-        proposal, decision = _recommendation_events(attack, [], Path("policies/global.json"))
+        config = json.loads(Path("policies/global.json").read_text(encoding="utf-8"))
+        config["targets"]["target-web-01"]["mode"] = "enforce"
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "policy.json"
+            policy.write_text(json.dumps(config), encoding="utf-8")
+            proposal, decision = _recommendation_events(attack, [], policy)
         self.assertEqual("suspend_process", proposal["payload"]["action_type"])
         self.assertEqual(15, proposal["payload"]["ttl_seconds"])
         self.assertEqual("allowed", decision["payload"]["status"])

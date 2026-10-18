@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .actions import pending_action_events
 from .event_store import JsonlEventStore
+from .integrations import redact
 from .models import ActionProposal, AuditEvent
 from .policy import SafetyGate
 from .reporting import build_report
@@ -18,6 +19,10 @@ from .sensors import NORMALIZERS
 
 
 MAX_BODY_BYTES = 1_048_576
+ENDPOINT_EVENT_TYPES = frozenset({
+    "defense.endpoint.heartbeat", "defense.endpoint.windows_event",
+    "defense.action.result", "defense.rollback",
+})
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -44,15 +49,22 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def _authorized(self) -> bool:
-        expected = f"Bearer {self.bearer_token}"
+    def _role(self) -> str | None:
         supplied = self.headers.get("Authorization", "")
-        return bool(self.bearer_token) and hmac.compare_digest(supplied, expected)
+        operator = self.bearer_token
+        endpoint = self.server.endpoint_token  # type: ignore[attr-defined]
+        if operator and hmac.compare_digest(supplied, f"Bearer {operator}"):
+            return "operator"
+        if endpoint and hmac.compare_digest(supplied, f"Bearer {endpoint}"):
+            return "endpoint"
+        return None
 
-    def _require_auth(self) -> bool:
-        if self._authorized():
+    def _require_role(self, *roles: str) -> bool:
+        role = self._role()
+        if role in roles:
             return True
-        self._reply(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        self._reply(HTTPStatus.FORBIDDEN if role else HTTPStatus.UNAUTHORIZED,
+                    {"error": "forbidden" if role else "unauthorized"})
         return False
 
     def _body(self) -> dict[str, Any]:
@@ -75,7 +87,10 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self._reply(HTTPStatus.OK, {"healthy": True, "service": "defensa-gateway"})
             return
-        if not self._require_auth():
+        if not self._require_role("operator", "endpoint"):
+            return
+        if self._role() == "endpoint" and parsed.path != "/v1/actions":
+            self._reply(HTTPStatus.FORBIDDEN, {"error": "forbidden"})
             return
         if parsed.path == "/v1/report":
             run_id = parse_qs(parsed.query).get("run_id", [None])[0]
@@ -109,7 +124,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self._reply(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._require_auth():
+        if not self._require_role("operator", "endpoint"):
             return
         try:
             body = self._body()
@@ -120,7 +135,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 if sensor not in NORMALIZERS or not run_id:
                     self._reply(HTTPStatus.BAD_REQUEST, {"error": "valid sensor and run_id are required"})
                     return
-                event = NORMALIZERS[sensor](body, run_id)
+                event = redact(NORMALIZERS[sensor](body, run_id))
                 if any(existing.get("event_id") == event["event_id"] for existing in self.event_store.read()):
                     self._reply(HTTPStatus.OK, {"status": "duplicate", "event_id": event["event_id"]})
                     return
@@ -128,10 +143,15 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 self._reply(HTTPStatus.CREATED, appended)
                 return
             if self.path == "/v1/events":
-                appended = self.event_store.append(AuditEvent(**body).to_dict())
+                if body.get("event_type") not in ENDPOINT_EVENT_TYPES:
+                    self._reply(HTTPStatus.FORBIDDEN, {"error": "event type is reserved"})
+                    return
+                appended = self.event_store.append(redact(AuditEvent(**body).to_dict()))
                 self._reply(HTTPStatus.CREATED, appended)
                 return
             if self.path == "/v1/proposals":
+                if not self._require_role("operator"):
+                    return
                 proposal = ActionProposal.from_dict(body)
                 proposal_event = AuditEvent(
                     event_type="defense.proposal",
@@ -174,10 +194,14 @@ def main() -> None:
     token = os.environ.get("DEFENSA_GATEWAY_TOKEN", "")
     if not token:
         raise SystemExit("DEFENSA_GATEWAY_TOKEN is required")
+    endpoint_token = os.environ.get("DEFENSA_ENDPOINT_TOKEN", "")
+    if not endpoint_token or hmac.compare_digest(token, endpoint_token):
+        raise SystemExit("DEFENSA_ENDPOINT_TOKEN must be set and differ from DEFENSA_GATEWAY_TOKEN")
     server = ThreadingHTTPServer((host, port), GatewayHandler)
     server.event_store = JsonlEventStore(os.environ.get("DEFENSA_EVENT_STORE", "data/events.jsonl"))
     server.policy_path = Path(os.environ.get("DEFENSA_POLICY", "policies/global.json"))
     server.bearer_token = token
+    server.endpoint_token = endpoint_token
     server.serve_forever()
 
 

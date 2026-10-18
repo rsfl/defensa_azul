@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Any
 
 
-SENSITIVE_KEYS = {"flag", "flag_value", "password", "secret", "token", "authorization", "cookie"}
+SENSITIVE_KEYS = {"flag", "flag_value", "password", "passwd", "secret", "token", "authorization", "cookie", "api_key", "apikey", "access_key", "credential", "credentials"}
+SENSITIVE_TEXT = re.compile(
+    r"(?i)\b(bearer|basic)\s+[^\s,;]+|"
+    r"\b(sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|dop_v1_[a-f0-9]{64})\b"
+)
+QUERY_VALUES = re.compile(r"([?&][^=&#\s]+)=([^&#\s]+)")
 
 
 def _sensitive_key(key: str) -> bool:
     normalized = key.lower().replace("-", "_")
     return (
         normalized in SENSITIVE_KEYS
-        or normalized.endswith(("_password", "_secret", "_token", "_cookie"))
+        or normalized.endswith(("_password", "_passwd", "_secret", "_token", "_cookie", "_api_key", "_apikey", "_access_key", "_credential", "_credentials"))
         or "authorization" in normalized
     )
 
@@ -24,6 +30,8 @@ def redact(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [redact(item) for item in value]
+    if isinstance(value, str):
+        return QUERY_VALUES.sub(r"\1=[REDACTED]", SENSITIVE_TEXT.sub("[REDACTED]", value))
     return value
 
 

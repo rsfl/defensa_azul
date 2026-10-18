@@ -1,5 +1,5 @@
 [Unit]
-Description=Defensa Azul CTF sensor forwarder
+Description=Defensa Azul sensor forwarder (pilot paths)
 After=network-online.target docker.service
 Wants=network-online.target
 

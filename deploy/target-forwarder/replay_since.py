@@ -18,7 +18,7 @@ def main() -> None:
         raise SystemExit("usage: replay_since.py ISO8601_CUTOFF")
     cutoff = sys.argv[1]
     base_url = os.environ["DEFENSA_GATEWAY_URL"].rstrip("/")
-    token = os.environ["DEFENSA_GATEWAY_TOKEN"]
+    token = os.environ["DEFENSA_ENDPOINT_TOKEN"]
     run_id = os.environ.get("DEFENSA_RUN_ID", "live")
     counts: dict[str, int] = {}
     for sensor, source in SOURCES.items():

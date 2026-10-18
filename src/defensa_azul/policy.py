@@ -77,7 +77,7 @@ class SafetyGate:
         if not proposal.rollback:
             reasons.append("rollback contract is missing")
         if proposal.intended_path_impacted:
-            reasons.append("proposal impacts the intended challenge path")
+            reasons.append("proposal impacts the protected service path")
         if proposal.action_type == "suspend_process":
             try:
                 resource = json.loads(proposal.resource)
