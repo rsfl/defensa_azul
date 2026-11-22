@@ -9,7 +9,13 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from .attacks import correlate_runtime_attacks
+from .attacks import (
+    correlate_observed_recon,
+    correlate_runtime_attacks,
+    correlate_windows_privileged_logon,
+    correlate_windows_privileged_logon_bursts,
+    correlate_windows_failed_logon_bursts,
+)
 from .event_store import JsonlEventStore
 from .models import ActionProposal, AuditEvent
 from .policy import SafetyGate
@@ -25,6 +31,7 @@ LAB_ATTACKER_IP = os.environ.get("DEFENSA_LAB_ATTACKER_IP", "")
 LAB_BRIDGE_IP = os.environ.get("DEFENSA_LAB_BRIDGE_IP", "")
 WINDOWS_BLOCK_TARGETS = {"win-client01", "win-dc01"}
 WINDOWS_BLOCK_ATTACK_TYPES = {
+    "privileged_network_logon",
     "credential_validation",
     "password_spray",
     "windows_auth_spray",
@@ -217,6 +224,10 @@ def _windows_firewall_block_action(
 ) -> tuple[str, str, int, dict[str, Any], str, dict[str, Any], dict[str, Any]] | None:
     if target_id not in WINDOWS_BLOCK_TARGETS or attack_type not in WINDOWS_BLOCK_ATTACK_TYPES:
         return None
+    if attack_type == "privileged_network_logon":
+        maximum_lag = float(os.environ.get("DEFENSA_WINDOWS_MAX_BLOCK_LAG_SECONDS", "30"))
+        if float(attack.get("payload", {}).get("observation_delay_seconds", float("inf"))) > maximum_lag:
+            return None
 
     incident_id = str(attack["incident_id"])
     observed_source = str(attack.get("payload", {}).get("source_host_or_ip") or attack.get("payload", {}).get("source_ip") or "")
@@ -245,7 +256,7 @@ def _windows_firewall_block_action(
     }
     false_positive_strategy = {
         "auto_rollback": True,
-        "rollback_deadline_seconds": 300,
+        "rollback_deadline_seconds": 600 if is_bridge_path else 300,
         "escalate_if_uncertain": True,
         "classification_on_rollback": "unresolved",
     }
@@ -263,7 +274,7 @@ def _windows_firewall_block_action(
     return (
         "windows_firewall_block",
         resource,
-        120 if is_bridge_path else 300,
+        600 if is_bridge_path else 300,
         rollback,
         (
             "Temporarily block inbound SMB from the lab host bridge path while preserving automatic rollback."
@@ -409,11 +420,29 @@ def main() -> None:
     token_budget = int(os.environ.get("DEFENSA_OPENAI_TOKEN_BUDGET", "0"))
     token_warning_percent = float(os.environ.get("DEFENSA_OPENAI_TOKEN_WARNING_PERCENT", "80"))
     rate_warning_percent = float(os.environ.get("DEFENSA_OPENAI_RATE_WARNING_PERCENT", "10"))
+    windows_sources = {
+        source.strip() for source in os.environ.get("DEFENSA_WINDOWS_ALERT_SOURCES", "").split(",")
+        if source.strip()
+    }
+    windows_not_before = os.environ.get("DEFENSA_WINDOWS_RULE_NOT_BEFORE")
+    windows_failure_not_before = os.environ.get("DEFENSA_WINDOWS_FAILURE_NOT_BEFORE")
 
     while True:
         events = list(store.read())
         existing_ids = {event.get("event_id") for event in events}
-        for attack in correlate_runtime_attacks(events, run_id):
+        for attack in [
+            *correlate_runtime_attacks(events, run_id),
+            *correlate_observed_recon(events, run_id),
+            *correlate_windows_privileged_logon(
+                events, run_id, allowed_sources=windows_sources, not_before=windows_not_before
+            ),
+            *correlate_windows_privileged_logon_bursts(
+                events, run_id, allowed_sources=windows_sources, not_before=windows_not_before
+            ),
+            *correlate_windows_failed_logon_bursts(
+                events, run_id, allowed_sources=windows_sources, not_before=windows_failure_not_before
+            ),
+        ]:
             if attack["event_id"] not in existing_ids:
                 store.append(attack)
                 existing_ids.add(attack["event_id"])
@@ -429,6 +458,14 @@ def main() -> None:
             if incident["event_id"] not in existing_ids:
                 store.append(incident)
                 existing_ids.add(incident["event_id"])
+            if attack.get("payload", {}).get("attack_type") == "privileged_network_logon":
+                proposal_event, decision_event = _recommendation_events(attack, [], policy_path)
+                if proposal_event["event_id"] not in existing_ids:
+                    store.append(proposal_event)
+                    existing_ids.add(proposal_event["event_id"])
+                if decision_event["event_id"] not in existing_ids:
+                    store.append(decision_event)
+                    existing_ids.add(decision_event["event_id"])
 
         checkpoint = int(checkpoint_path.read_text().strip() or "0") if checkpoint_path.exists() else 0
         for event in store.read():
@@ -436,6 +473,13 @@ def main() -> None:
             if sequence <= checkpoint:
                 continue
             if event.get("event_type") == "defense.attack.detected":
+                if event.get("payload", {}).get("attack_type") in {
+                    "privileged_network_logon_burst", "windows_failed_logon_burst"
+                }:
+                    # The incident was already opened above. This generic burst
+                    # signal must not create another block or spend model tokens.
+                    checkpoint_path.write_text(f"{sequence}\n", encoding="utf-8")
+                    continue
                 current = list(store.read())
                 completed_roles = {
                     str(item.get("actor", {}).get("id"))

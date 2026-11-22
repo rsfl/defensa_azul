@@ -14,12 +14,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ($EnableBlocking) {
-    throw "Windows blocking is disabled until independent rollback recovery is implemented and tested."
-}
-
 $sourceAgent = Join-Path $PSScriptRoot "defensa-windows-agent.ps1"
 $targetAgent = Join-Path $InstallDir "defensa-windows-agent.ps1"
+$sourceRollback = Join-Path $PSScriptRoot "remove-defensa-firewall-rule.ps1"
+$targetRollback = Join-Path $InstallDir "remove-defensa-firewall-rule.ps1"
 $logPath = Join-Path $InstallDir "windows-agent.log"
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -55,6 +53,7 @@ try {
 if ((Resolve-Path -LiteralPath $sourceAgent).Path -ne (Resolve-Path -LiteralPath $targetAgent -ErrorAction SilentlyContinue).Path) {
     Copy-Item -LiteralPath $sourceAgent -Destination $targetAgent -Force
 }
+Copy-Item -LiteralPath $sourceRollback -Destination $targetRollback -Force
 
 $encodedArgs = @(
     "-NoProfile",

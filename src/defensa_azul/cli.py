@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .attacks import correlate_runtime_attacks
+from .attacks import correlate_observed_recon, correlate_runtime_attacks
 from .event_store import JsonlEventStore
 from .models import ActionProposal, AuditEvent
 from .policy import SafetyGate
@@ -105,7 +105,11 @@ def main() -> None:
         return
     if args.command == "correlate-attacks":
         existing_ids = {event.get("event_id") for event in store.read()}
-        attacks = correlate_runtime_attacks(store.read(), args.run_id, window_seconds=args.window_seconds)
+        events = list(store.read())
+        attacks = [
+            *correlate_runtime_attacks(events, args.run_id, window_seconds=args.window_seconds),
+            *correlate_observed_recon(events, args.run_id, window_seconds=args.window_seconds),
+        ]
         appended = 0
         skipped = 0
         for event in attacks:

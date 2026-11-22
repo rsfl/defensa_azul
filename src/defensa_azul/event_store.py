@@ -20,6 +20,34 @@ def _content_for_hash(event: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def _last_record(handle: Any) -> dict[str, Any] | None:
+    """Read the final complete JSONL record without rescanning the event store."""
+
+    handle.seek(0, os.SEEK_END)
+    end = handle.tell()
+    if end == 0:
+        return None
+    handle.seek(end - 1)
+    if handle.read(1) != b"\n":
+        raise ValueError("event store does not end with a newline")
+    position = end
+    tail = b""
+    while position:
+        size = min(65536, position)
+        position -= size
+        handle.seek(position)
+        tail = handle.read(size) + tail
+        lines = tail.split(b"\n")
+        complete = lines[1:] if position else lines
+        for line in reversed(complete):
+            if line.strip():
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("invalid final JSONL record") from exc
+    return None
+
+
 class JsonlEventStore:
     """Append-only, hash-chained JSONL event store.
 
@@ -35,20 +63,11 @@ class JsonlEventStore:
         if "event_id" not in event or "event_type" not in event:
             raise ValueError("event_id and event_type are required")
 
-        with self.path.open("a+", encoding="utf-8") as handle:
+        with self.path.open("a+b") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             try:
-                handle.seek(0)
-                previous: dict[str, Any] | None = None
-                sequence = 0
-                for line_number, line in enumerate(handle, start=1):
-                    if not line.strip():
-                        continue
-                    try:
-                        previous = json.loads(line)
-                    except json.JSONDecodeError as exc:
-                        raise ValueError(f"invalid JSONL at line {line_number}") from exc
-                    sequence += 1
+                previous = _last_record(handle)
+                sequence = int(previous["integrity"]["sequence"]) if previous else 0
 
                 enriched = deepcopy(event)
                 enriched["integrity"] = {
@@ -62,7 +81,7 @@ class JsonlEventStore:
                 ).hexdigest()
 
                 handle.seek(0, os.SEEK_END)
-                handle.write(json.dumps(enriched, sort_keys=True, ensure_ascii=False) + "\n")
+                handle.write((json.dumps(enriched, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
                 handle.flush()
                 os.fsync(handle.fileno())
                 return enriched
