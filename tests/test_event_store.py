@@ -41,6 +41,39 @@ class EventStoreTests(unittest.TestCase):
             path.write_text(json.dumps(value) + "\n")
             self.assertTrue(store.verify())
 
+    def test_append_after_large_final_record_preserves_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = JsonlEventStore(Path(directory) / "events.jsonl")
+            for value in ("x" * 70000, "next"):
+                store.append(AuditEvent(
+                    event_type="defense.finding",
+                    actor={"type": "agent", "id": "test"},
+                    payload={"value": value},
+                    run_id="run-test",
+                ).to_dict())
+            self.assertEqual([], store.verify())
+            self.assertEqual([1, 2], [event["integrity"]["sequence"] for event in store.read()])
+
+    def test_append_rejects_incomplete_final_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            store = JsonlEventStore(path)
+            store.append(AuditEvent(
+                event_type="defense.finding",
+                actor={"type": "agent", "id": "test"},
+                payload={},
+                run_id="run-test",
+            ).to_dict())
+            with path.open("ab") as handle:
+                handle.write(b'{"partial":')
+            with self.assertRaisesRegex(ValueError, "does not end with a newline"):
+                store.append(AuditEvent(
+                    event_type="defense.finding",
+                    actor={"type": "agent", "id": "test"},
+                    payload={},
+                    run_id="run-test",
+                ).to_dict())
+
 
 if __name__ == "__main__":
     unittest.main()

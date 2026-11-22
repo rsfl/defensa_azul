@@ -8,8 +8,9 @@ param(
     [string]$TargetId = $env:COMPUTERNAME.ToLowerInvariant(),
     [string]$StatePath = "C:\ProgramData\DefensaAzul\windows-agent-state.json",
     [int]$PollSeconds = 10,
+    [ValidateRange(10, 3600)][int]$HeartbeatSeconds = 60,
     [int]$BootstrapLookbackMinutes = 30,
-    [int]$MaxWindowsEventsPerLoop = 50,
+    [ValidateRange(3, 1000)][int]$MaxWindowsEventsPerLoop = 50,
     [string[]]$AllowedBlockSources = @(),
     [string[]]$ProtectedSources = @("127.0.0.1"),
     [string]$BridgeSource = "",
@@ -20,8 +21,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($EnableBlocking) {
-    throw "Windows blocking is disabled until independent rollback recovery is implemented and tested."
+if ($EnableBlocking -and -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'remove-defensa-firewall-rule.ps1'))) {
+    throw "Windows blocking requires the independent rollback script"
 }
 $Token = (Get-Content -LiteralPath $TokenFile -Raw).Trim()
 if ([string]::IsNullOrWhiteSpace($Token)) { throw "Endpoint token file is empty" }
@@ -76,12 +77,26 @@ function New-StableId {
 
 function Read-State {
     if (Test-Path -LiteralPath $StatePath) {
-        $raw = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
-        $state = @{}
-        foreach ($property in $raw.PSObject.Properties) {
-            $state[$property.Name] = $property.Value
+        try {
+            $content = Get-Content -LiteralPath $StatePath -Raw -ErrorAction Stop
+            if ([string]::IsNullOrWhiteSpace($content)) {
+                throw 'Agent state file is empty'
+            }
+            $raw = $content | ConvertFrom-Json -ErrorAction Stop
+            if ($null -eq $raw -or $raw -isnot [pscustomobject]) {
+                throw 'Agent state file is not a JSON object'
+            }
+            $state = @{}
+            foreach ($property in $raw.PSObject.Properties) {
+                $state[$property.Name] = $property.Value
+            }
+            return $state
+        } catch {
+            $backup = "$StatePath.corrupt.$(Get-Date -Format 'yyyyMMddTHHmmssfff')"
+            Copy-Item -LiteralPath $StatePath -Destination $backup -ErrorAction Stop
+            Write-Warning "Invalid agent state was preserved at $backup; resuming from a bounded bootstrap lookback."
+            return @{}
         }
-        return $state
     }
     return @{}
 }
@@ -90,7 +105,18 @@ function Write-State {
     param([hashtable]$State)
     $dir = Split-Path -Parent $StatePath
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    $State | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $StatePath -Encoding UTF8
+    $temporary = "$StatePath.tmp.$PID.$([guid]::NewGuid().ToString('N'))"
+    try {
+        $json = $State | ConvertTo-Json -Depth 6
+        [System.IO.File]::WriteAllText($temporary, $json, (New-Object System.Text.UTF8Encoding($false)))
+        if (Test-Path -LiteralPath $StatePath) {
+            [System.IO.File]::Replace($temporary, $StatePath, "$StatePath.previous")
+        } else {
+            Move-Item -LiteralPath $temporary -Destination $StatePath -ErrorAction Stop
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Convert-EventData {
@@ -142,8 +168,16 @@ function Get-DefensaEvents {
 }
 
 function Send-Heartbeat {
+    param([hashtable]$State)
     $now = Get-UtcIso
     $eventId = New-StableId "evt" "$RunId|$TargetId|heartbeat|$now"
+    $cursor = @{}
+    $lastObserved = @{}
+    foreach ($channel in $interestingEvents.Keys) {
+        if ($State.ContainsKey($channel)) { $cursor[$channel] = $State[$channel] }
+        $observedKey = "observed:$channel"
+        if ($State.ContainsKey($observedKey)) { $lastObserved[$channel] = $State[$observedKey] }
+    }
     Send-DefensaEvent @{
         schema_version = "1.0.0"
         event_id = $eventId
@@ -162,6 +196,8 @@ function Send-Heartbeat {
             os = (Get-CimInstance Win32_OperatingSystem).Caption
             mode = if ($EnableBlocking) { "enforce" } else { "observe" }
             blocking_enabled = [bool]$EnableBlocking
+            event_cursors = $cursor
+            last_forwarded_observed_time = $lastObserved
         }
     }
 }
@@ -169,6 +205,15 @@ function Send-Heartbeat {
 function Get-NewEvents {
     param([hashtable]$State)
     $all = New-Object System.Collections.Generic.List[object]
+    # Privileged-logon response depends on Security freshness; Sysmon can back up independently.
+    $securityLimit = [Math]::Max(1, [int][Math]::Floor($MaxWindowsEventsPerLoop * 0.7))
+    $systemLimit = [Math]::Max(1, [int][Math]::Floor($MaxWindowsEventsPerLoop * 0.05))
+    $sysmonLimit = [Math]::Max(1, $MaxWindowsEventsPerLoop - $securityLimit - $systemLimit)
+    $channelLimits = @{
+        "Security" = $securityLimit
+        "System" = $systemLimit
+        "Microsoft-Windows-Sysmon/Operational" = $sysmonLimit
+    }
     foreach ($logName in $interestingEvents.Keys) {
         try {
             Get-WinEvent -ListLog $logName -ErrorAction Stop | Out-Null
@@ -181,22 +226,22 @@ function Get-NewEvents {
             $lastRecordId = [int64]$State[$logName]
         }
 
-        $filter = @{ LogName = $logName; Id = $interestingEvents[$logName] }
-        if ($lastRecordId -eq 0) {
-            $filter.StartTime = (Get-Date).AddMinutes(-1 * $BootstrapLookbackMinutes)
-        }
-
         try {
-            $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents 200 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.RecordId -gt $lastRecordId } |
-                Sort-Object RecordId
+            if ($lastRecordId -eq 0) {
+                $filter = @{
+                    LogName = $logName
+                    Id = $interestingEvents[$logName]
+                    StartTime = (Get-Date).AddMinutes(-1 * $BootstrapLookbackMinutes)
+                }
+                $events = @(Get-WinEvent -FilterHashtable $filter -Oldest -MaxEvents $channelLimits[$logName] -ErrorAction SilentlyContinue)
+            } else {
+                $eventIds = ($interestingEvents[$logName] | ForEach-Object { "EventID=$_" }) -join ' or '
+                $xpath = "*[System[EventRecordID > $lastRecordId and ($eventIds)]]"
+                $events = @(Get-WinEvent -LogName $logName -FilterXPath $xpath -Oldest -MaxEvents $channelLimits[$logName] -ErrorAction SilentlyContinue)
+            }
             foreach ($event in $events) {
                 $all.Add($event)
-                if ($event.RecordId -gt $lastRecordId) {
-                    $lastRecordId = $event.RecordId
-                }
             }
-            $State[$logName] = $lastRecordId
         } catch [System.Exception] {
             if ($_.Exception.Message -notmatch "No events were found") {
                 Write-Warning "Failed to read ${logName}: $($_.Exception.Message)"
@@ -207,7 +252,7 @@ function Get-NewEvents {
 }
 
 function Send-WindowsEvents {
-    param([object[]]$Events)
+    param([object[]]$Events, [hashtable]$State)
     foreach ($event in $Events) {
         $observed = $event.TimeCreated.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ")
         $eventId = New-StableId "evt" "$RunId|$TargetId|$($event.ProviderName)|$($event.RecordId)"
@@ -242,6 +287,8 @@ function Send-WindowsEvents {
                 blocking_enabled = [bool]$EnableBlocking
             }
         }
+        $State[$event.LogName] = [int64]$event.RecordId
+        $State["observed:$($event.LogName)"] = $observed
     }
 }
 
@@ -352,6 +399,65 @@ function Assert-WindowsFirewallResource {
     if (-not $ruleName.StartsWith("DefensaAzul block ")) {
         throw "Refusing firewall rule without DefensaAzul prefix"
     }
+    if ($ruleName -notmatch '^DefensaAzul block [A-Za-z0-9 .:_-]+$') {
+        throw "Refusing firewall rule with unsafe name characters"
+    }
+}
+
+function Register-DefensaRollback {
+    param([string]$RuleName, [string]$ProposalId, [int]$TtlSeconds)
+    $digest = New-StableId 'rollback' $ProposalId
+    $taskName = 'DefensaAzulRollback-' + $digest.Substring('rollback-'.Length, 24)
+    $scriptPath = Join-Path $PSScriptRoot 'remove-defensa-firewall-rule.ps1'
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        throw 'Independent rollback script is missing'
+    }
+    $dueUtc = [DateTime]::UtcNow.AddSeconds($TtlSeconds)
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -RuleName `"$RuleName`" -TaskName `"$taskName`""
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
+    $trigger = New-ScheduledTaskTrigger -Once -At $dueUtc.ToLocalTime()
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    return @{ task_name = $taskName; due_utc = $dueUtc.ToString('yyyy-MM-ddTHH:mm:ss.ffffffZ') }
+}
+
+function Assert-ActiveFirewallProfile {
+    $profiles = @(Get-NetConnectionProfile | ForEach-Object {
+        switch ([string]$_.NetworkCategory) {
+            'DomainAuthenticated' { 'Domain' }
+            'Private' { 'Private' }
+            'Public' { 'Public' }
+        }
+    } | Select-Object -Unique)
+    if ($profiles.Count -eq 0) { throw 'No active Windows network profile was found' }
+    foreach ($profileName in $profiles) {
+        $profile = Get-NetFirewallProfile -Name $profileName
+        if (-not $profile.Enabled) {
+            throw "Windows Firewall $profileName profile is disabled; rule would not enforce"
+        }
+    }
+    return ($profiles -join ',')
+}
+
+function Assert-InstalledFirewallRule {
+    param([string]$RuleName, [string]$SourceIp, [int]$DestinationPort)
+    $rules = @(Get-NetFirewallRule -DisplayName $RuleName -ErrorAction Stop)
+    if ($rules.Count -ne 1) { throw "Expected exactly one installed Defensa firewall rule" }
+    $rule = $rules[0]
+    if ([string]$rule.Enabled -ne 'True' -or [string]$rule.Action -ne 'Block' -or [string]$rule.Direction -ne 'Inbound') {
+        throw 'Installed Defensa firewall rule is disabled or has the wrong action/direction'
+    }
+    $portFilter = $rule | Get-NetFirewallPortFilter -ErrorAction Stop
+    $addressFilter = $rule | Get-NetFirewallAddressFilter -ErrorAction Stop
+    if ([string]$portFilter.Protocol -ne 'TCP' -or [string]$portFilter.LocalPort -ne [string]$DestinationPort) {
+        throw 'Installed Defensa firewall rule has the wrong protocol/port'
+    }
+    if (@($addressFilter.RemoteAddress) -notcontains $SourceIp) {
+        throw 'Installed Defensa firewall rule has the wrong source address'
+    }
+    $profiles = Assert-ActiveFirewallProfile
+    return @{ rule_state_verified = $true; active_firewall_profiles = $profiles }
 }
 
 function Invoke-ApprovedActions {
@@ -384,7 +490,22 @@ function Invoke-ApprovedActions {
             continue
         }
 
+        # A restarted agent must never apply an old allowed decision to a new trial.
+        $createdAt = [DateTime]::Parse([string]$proposal.payload.created_at).ToUniversalTime()
+        if ([DateTime]::UtcNow -gt $createdAt.AddSeconds(60)) {
+            Send-ActionResult $proposal $decision "skipped" @{
+                status = "skipped"
+                reason = "proposal_expired_before_execution"
+                target_id = $TargetId
+            }
+            $State["action:$proposalId"] = "skipped"
+            continue
+        }
+
         $status = "failed"
+        $watchdog = $null
+        $ruleName = ""
+        $ruleInstalled = $false
         $result = @{
             status = "failed"
             target_id = $TargetId
@@ -392,9 +513,11 @@ function Invoke-ApprovedActions {
         try {
             $resource = Read-ActionResource $proposal
             Assert-WindowsFirewallResource $resource
+            $activeFirewallProfiles = Assert-ActiveFirewallProfile
             $ruleName = [string]$resource.rule_name
             $dstPort = [int]$resource.dst_port
             $srcIp = [string]$resource.src_ip
+            $watchdog = Register-DefensaRollback $ruleName $proposalId ([int]$proposal.payload.ttl_seconds)
             Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
             New-NetFirewallRule `
                 -DisplayName $ruleName `
@@ -404,7 +527,9 @@ function Invoke-ApprovedActions {
                 -LocalPort $dstPort `
                 -RemoteAddress $srcIp `
                 -Profile Any | Out-Null
-            $rollbackDue = [DateTime]::UtcNow.AddSeconds([int]$proposal.payload.ttl_seconds).ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ")
+            $ruleInstalled = $true
+            $ruleProof = Assert-InstalledFirewallRule $ruleName $srcIp $dstPort
+            $rollbackDue = $watchdog.due_utc
             $status = "succeeded"
             $result = @{
                 status = "succeeded"
@@ -413,13 +538,24 @@ function Invoke-ApprovedActions {
                 dst_port = $dstPort
                 protocol = "tcp"
                 direction = "inbound"
+                active_firewall_profiles = $ruleProof.active_firewall_profiles
+                rule_state_verified = $ruleProof.rule_state_verified
+                traffic_blocked = "unverified_until_connectivity_check"
                 rollback_due_utc = $rollbackDue
+                rollback_task = $watchdog.task_name
             }
             $State["rollback_due:$proposalId"] = $rollbackDue
             $State["rollback_rule:$proposalId"] = $ruleName
             $State["rollback_incident:$proposalId"] = [string]$proposal.payload.incident_id
             $State["rollback_action:$proposalId"] = [string]$proposal.payload.action_type
+            $State["rollback_task:$proposalId"] = $watchdog.task_name
         } catch {
+            if ($ruleInstalled -and $ruleName) {
+                Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+            }
+            if ($watchdog) {
+                Unregister-ScheduledTask -TaskName $watchdog.task_name -Confirm:$false -ErrorAction SilentlyContinue
+            }
             $result = @{
                 status = "failed"
                 error = [string]$_.Exception.Message
@@ -456,6 +592,10 @@ function Invoke-PendingRollbacks {
         $errorText = ""
         try {
             Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+            $rollbackTask = [string]$State["rollback_task:$proposalId"]
+            if ($rollbackTask) {
+                Unregister-ScheduledTask -TaskName $rollbackTask -Confirm:$false -ErrorAction SilentlyContinue
+            }
         } catch {
             $status = "failed"
             $errorText = [string]$_.Exception.Message
@@ -485,7 +625,12 @@ function Invoke-PendingRollbacks {
 
 Write-Host "Starting Defensa Azul Windows agent for $TargetId -> $GatewayUrl"
 Write-Host "Blocking enabled: $([bool]$EnableBlocking)"
-Send-Heartbeat
+try {
+    Send-Heartbeat (Read-State)
+} catch {
+    Write-Warning "Failed to send startup heartbeat: $($_.Exception.Message)"
+}
+$nextHeartbeat = [DateTime]::UtcNow.AddSeconds($HeartbeatSeconds)
 
 do {
     $state = Read-State
@@ -501,11 +646,27 @@ do {
         $events = @($events | Select-Object -First $MaxWindowsEventsPerLoop)
     }
     if ($events.Count -gt 0) {
-        Send-WindowsEvents $events
+        try {
+            Send-WindowsEvents $events $state
+        } catch {
+            Write-Warning "Failed to forward Windows event; retrying next loop: $($_.Exception.Message)"
+        }
     }
     Write-State $state
+    if ([DateTime]::UtcNow -ge $nextHeartbeat) {
+        try {
+            Send-Heartbeat $state
+        } catch {
+            Write-Warning "Failed to send periodic heartbeat: $($_.Exception.Message)"
+        }
+        $nextHeartbeat = [DateTime]::UtcNow.AddSeconds($HeartbeatSeconds)
+    }
     if ($Once) {
         break
     }
-    Start-Sleep -Seconds $PollSeconds
+    if ($events.Count -ge $MaxWindowsEventsPerLoop) {
+        Start-Sleep -Seconds 1
+    } else {
+        Start-Sleep -Seconds $PollSeconds
+    }
 } while ($true)

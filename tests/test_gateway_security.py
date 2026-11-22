@@ -58,6 +58,13 @@ class GatewaySecurityTests(unittest.TestCase):
         self.assertEqual(201, status)
         self.assertEqual("[REDACTED]", event["payload"]["api_key"])
 
+    def test_endpoint_retry_does_not_duplicate_event(self):
+        body = {"event_id": "stable-heartbeat-1", "event_type": "defense.endpoint.heartbeat",
+                "actor": {"id": "host"}, "payload": {}, "run_id": "r"}
+        self.assertEqual(201, self.request("/v1/events", "endpoint-test-token", body)[0])
+        self.assertEqual(200, self.request("/v1/events", "endpoint-test-token", body)[0])
+        self.assertEqual(1, len(list(self.server.event_store.read())))
+
     def test_operator_proposal_still_runs_through_policy(self):
         proposal = json.loads(Path("examples/proposal.json").read_text(encoding="utf-8"))
         status, decision = self.request("/v1/proposals", "operator-test-token", proposal)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +24,7 @@ ENDPOINT_EVENT_TYPES = frozenset({
     "defense.endpoint.heartbeat", "defense.endpoint.windows_event",
     "defense.action.result", "defense.rollback",
 })
+_cache_init_lock = threading.Lock()
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -39,6 +41,24 @@ class GatewayHandler(BaseHTTPRequestHandler):
     @property
     def bearer_token(self) -> str:
         return self.server.bearer_token  # type: ignore[attr-defined]
+
+    def _append_unique(self, event: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+        # The endpoint may retry after an HTTP timeout. Cache IDs once instead
+        # of rescanning the growing audit chain for every forwarded event.
+        if not hasattr(self.server, "event_ids_lock"):
+            with _cache_init_lock:
+                if not hasattr(self.server, "event_ids_lock"):
+                    self.server.event_ids = {  # type: ignore[attr-defined]
+                        item.get("event_id") for item in self.event_store.read()
+                    }
+                    self.server.event_ids_lock = threading.Lock()  # type: ignore[attr-defined]
+        with self.server.event_ids_lock:  # type: ignore[attr-defined]
+            event_id = event["event_id"]
+            if event_id in self.server.event_ids:  # type: ignore[attr-defined]
+                return False, {"status": "duplicate", "event_id": event_id}
+            appended = self.event_store.append(event)
+            self.server.event_ids.add(event_id)  # type: ignore[attr-defined]
+            return True, appended
 
     def _reply(self, status: HTTPStatus, body: dict[str, Any]) -> None:
         encoded = json.dumps(body, sort_keys=True).encode("utf-8")
@@ -136,18 +156,15 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     self._reply(HTTPStatus.BAD_REQUEST, {"error": "valid sensor and run_id are required"})
                     return
                 event = redact(NORMALIZERS[sensor](body, run_id))
-                if any(existing.get("event_id") == event["event_id"] for existing in self.event_store.read()):
-                    self._reply(HTTPStatus.OK, {"status": "duplicate", "event_id": event["event_id"]})
-                    return
-                appended = self.event_store.append(event)
-                self._reply(HTTPStatus.CREATED, appended)
+                created, result = self._append_unique(event)
+                self._reply(HTTPStatus.CREATED if created else HTTPStatus.OK, result)
                 return
             if self.path == "/v1/events":
                 if body.get("event_type") not in ENDPOINT_EVENT_TYPES:
                     self._reply(HTTPStatus.FORBIDDEN, {"error": "event type is reserved"})
                     return
-                appended = self.event_store.append(redact(AuditEvent(**body).to_dict()))
-                self._reply(HTTPStatus.CREATED, appended)
+                created, result = self._append_unique(redact(AuditEvent(**body).to_dict()))
+                self._reply(HTTPStatus.CREATED if created else HTTPStatus.OK, result)
                 return
             if self.path == "/v1/proposals":
                 if not self._require_role("operator"):
